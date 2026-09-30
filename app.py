@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import re
-import random
+import secrets
 import string
 
 app = Flask(__name__)
@@ -35,12 +35,19 @@ def check_password_strength(password):
 
 
 def generate_strong_password(length=12):
-    all_chars = string.ascii_letters + string.digits + string.punctuation
-    while True:
-        password = ''.join(random.choices(all_chars, k=length))
-        strength, _, _ = check_password_strength(password)
-        if strength == "Strong":
-            return password
+    if not isinstance(length, int) or length < 12:
+        raise ValueError("Password length must be an integer of at least 12.")
+
+    required = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        secrets.choice("!@#$%^&*(),.?\":{}|<>"),
+    ]
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*(),.?\":{}|<>"
+    password = required + [secrets.choice(alphabet) for _ in range(length - len(required))]
+    secrets.SystemRandom().shuffle(password)
+    return "".join(password)
 
 
 @app.route('/')
@@ -50,8 +57,12 @@ def home():
 
 @app.route('/check', methods=['POST'])
 def check():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     password = data.get("password", "")
+    if not isinstance(password, str):
+        return jsonify({"error": "Password must be a string."}), 400
+    if len(password) > 1024:
+        return jsonify({"error": "Password must be 1024 characters or fewer."}), 400
     strength, message, suggestions = check_password_strength(password)
     return jsonify({
         "strength": strength,
@@ -67,4 +78,4 @@ def generate():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
